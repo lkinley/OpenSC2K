@@ -60,6 +60,14 @@ Then start the game:
 godot --path game
 ```
 
+## Map controls
+
+Select the **Center** tool (`C`), then hold the left mouse button and drag to move the map.
+Release to stop. Click without dragging to center the view on that tile.
+Hold **Option** on macOS (**Alt** on Windows or Linux) to use Center temporarily with another tool selected.
+Building and zoning tools keep their normal left-drag actions. Right-button and middle-button dragging also move the map.
+Keyboard and mouse bindings can be changed in **Settings > Controls**.
+
 ## Game files
 
 OpenSC2K does not include the original game files. They supply the original graphics, text, sound, and music.

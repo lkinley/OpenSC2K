@@ -28,6 +28,7 @@ func _run() -> void:
 	_test_menu_hints_and_rebinding()
 	_test_focus_and_extras()
 	_test_mouse_buttons()
+	_test_center_drag()
 	_test_tool_modifiers()
 	_test_held_tools()
 	_test_shift_click_queries()
@@ -206,6 +207,84 @@ func _test_mouse_buttons() -> void:
 	main.settings.apply_control_bindings()
 
 
+func _test_center_drag() -> void:
+	var map := main.map_view
+	var interaction := map.interaction
+	var completed := [0]
+	map.selection_completed.connect(func(_start: Vector2i, _end: Vector2i, _path: Array, _moved: bool) -> void:
+		completed[0] += 1)
+	main.camera_input.choose_tool_group(CityToolIds.Group.CENTERING)
+	map.reset_zoom()
+	var origin := map.size * 0.5 + Vector2(96, 48)
+	var movement := Vector2(30, 20)
+
+	for zoom in [1.0, 2.0]:
+		map.zoom_factor = zoom
+		var center := map.source_center
+		interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, true))
+		assert(map.is_panning(), "Center holds the camera while the button is down")
+		interaction._handle_mouse_motion(_drag(origin + movement, movement))
+		assert(map.source_center.is_equal_approx(center - movement / map.camera._view_scale()),
+			"Left dragging follows the pointer at each zoom")
+		center = map.source_center
+		interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin + movement, false))
+		assert(map.source_center == center and not map.is_panning() and not map.is_left_drag_active(),
+			"Releasing a drag stops without centering")
+
+	# Returning to the press point still counts as a drag, not a click.
+	interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, true))
+	interaction._handle_mouse_motion(_drag(origin + movement, movement))
+	interaction._handle_mouse_motion(_drag(origin, -movement))
+	interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, false))
+	assert(completed[0] == 0, "Dragging never applies the Center click action")
+
+	var target := map.camera._tile_at(origin)
+	interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, true))
+	interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, false))
+	assert(completed[0] == 1 and map.center_tile() == target, "A stationary click still centers on its tile")
+
+	# A stolen release and a canceled gesture must not leave the camera held.
+	interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, true))
+	var lost_release := _drag(origin + movement, movement)
+	lost_release.button_mask = 0
+	interaction._handle_mouse_motion(lost_release)
+	assert(not map.is_panning() and not map.is_left_drag_active() and completed[0] == 1)
+	interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, true))
+	assert(map.cancel_active_selection())
+	interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, false))
+	assert(not map.is_panning() and completed[0] == 1)
+
+	# A tool shortcut ends the pan before it can become a construction stroke.
+	main.preferences.control_bindings.add("tool_residential", ControlBinding.key(KEY_R))
+
+	for key in [KEY_X, KEY_R]:
+		main.camera_input.choose_tool_group(CityToolIds.Group.CENTERING)
+		var saved: PackedByteArray = main.document_state.city.document.serialize().data
+		interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, true))
+		interaction._handle_mouse_motion(_drag(origin + movement, movement))
+		_press(key)
+		assert(main.tool_state.selected_group != CityToolIds.Group.CENTERING)
+		interaction._process(0.2)
+		interaction._handle_mouse_motion(_drag(origin + movement * 2.0, movement))
+		interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin + movement * 2.0, false))
+		assert(not map.is_left_drag_active() and completed[0] == 1, "A tool shortcut cannot apply a pan as an edit")
+		assert(main.document_state.city.document.serialize().data == saved, "Changing tools during a pan preserves the city")
+
+	main.preferences.control_bindings.remove_binding("tool_residential", ControlBinding.key(KEY_R))
+
+	# Zone and road drags remain tool selections, with no camera movement.
+	for group in [CityToolIds.Group.RESIDENTIAL, CityToolIds.Group.ROADS]:
+		main.camera_input.choose_tool_group(group)
+		var center := map.source_center
+		interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin, true))
+		interaction._handle_mouse_motion(_drag(origin + Vector2(96, 48), Vector2(96, 48)))
+		assert(map.selection_moved and not map.is_panning() and map.source_center == center,
+			"Construction drags select tiles without moving the camera")
+		interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, origin + Vector2(96, 48), false))
+	assert(completed[0] == 3, "Zone and road drags still apply their selections")
+	map.reset_zoom()
+
+
 # the line or rectangle and query modifiers follow their bindings
 func _test_tool_modifiers() -> void:
 	var interaction := main.map_view.interaction
@@ -296,6 +375,16 @@ func _test_held_tools() -> void:
 	assert(map.source_center != center, "An Option-click centers the map")
 	main.camera_input.input(_key(KEY_ALT, false))
 	assert(state.selected_group == CityToolIds.Group.RESIDENTIAL)
+
+	main.camera_input.input(alt)
+	map.interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, target, true))
+	main.camera_input.input(_key(KEY_ALT, false))
+	assert(state.selected_group == CityToolIds.Group.CENTERING, "Releasing Option keeps Center until the drag ends")
+	map.interaction._handle_mouse_motion(_drag(target + Vector2(30, 20), Vector2(30, 20)))
+	center = map.source_center
+	map.interaction._handle_mouse_button(_mouse(MOUSE_BUTTON_LEFT, target + Vector2(30, 20), false))
+	assert(map.source_center == center and not map.is_panning())
+	assert(state.selected_group == CityToolIds.Group.RESIDENTIAL, "Ending the pan gives back the chosen tool")
 
 	# a chosen tool ends the held tool, and a text field takes the key
 	main.camera_input.input(_key(KEY_B))
@@ -410,5 +499,14 @@ func _mouse(button: MouseButton, position: Vector2, pressed: bool) -> InputEvent
 	event.button_index = button
 	event.position = position
 	event.pressed = pressed
+
+	return event
+
+
+func _drag(position: Vector2, relative: Vector2) -> InputEventMouseMotion:
+	var event := InputEventMouseMotion.new()
+	event.position = position
+	event.relative = relative
+	event.button_mask = MOUSE_BUTTON_MASK_LEFT
 
 	return event

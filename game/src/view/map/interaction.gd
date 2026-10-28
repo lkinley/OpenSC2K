@@ -135,6 +135,7 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 		return
 
 	if event.pressed:
+		_press_position = event.position
 		_query_on_release = query_held and map.selection_start.x < 0
 		map.selection._show_placement_error(event.position)
 
@@ -162,6 +163,13 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 			if map.repeat_placement:
 				map.selection._emit_repeat_placement(tile, false)
 	else:
+		if map.pan_on_left_drag and map.selection_start.x >= 0 and (
+				map.selection_moved or event.position.distance_to(_press_position) > 4.0):
+			map.selection._end_held_placement()
+			map.accept_event()
+
+			return
+
 		if _query_on_release and map.selection_start.x >= 0 and not map.selection_moved and tile == map.selection_start:
 			_query_on_release = false
 			map.selection.cancel_active_selection()
@@ -302,14 +310,23 @@ func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 		map.queue_redraw()
 
 	# a dialog that opens during a drag can take the release
+	var left_pan := map.pan_on_left_drag and map.is_left_drag_active()
+
+	if left_pan and (event.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+		map.selection._end_held_placement()
+		left_pan = false
+
 	if panning and (event.button_mask & (1 << (_pan_button - 1))) == 0:
 		panning = false
 		_pan_button = MOUSE_BUTTON_NONE
 		_click_button = MOUSE_BUTTON_NONE
 
-	if panning:
+	if panning or left_pan:
 		if event.position.distance_to(_press_position) > 4.0:
 			_click_button = MOUSE_BUTTON_NONE
+
+			if left_pan:
+				map.selection_moved = true
 
 		map.source_center -= event.relative / map.camera._view_scale()
 		map.camera._clamp_source_center()

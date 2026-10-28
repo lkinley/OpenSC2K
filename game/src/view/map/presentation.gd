@@ -224,7 +224,7 @@ func debug_metrics() -> Dictionary:
 	return {
 		"zoom": "%d%%" % map.camera.zoom_percent(),
 		"center_tile": str(map.camera.center_tile()),
-		"panning": map.interaction.panning,
+		"panning": map.camera.is_panning(),
 		"selection_drag": map.selection.is_left_drag_active(),
 		"sign_entries": map.signs.sign_entries.size(),
 		"sign_scans": map.signs.sign_cache_build_count,

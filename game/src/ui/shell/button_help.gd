@@ -155,8 +155,8 @@ const TOPICS: Dictionary[String, Array] = {
 			+ "departments, zoos, museums, et al., will have a specific micro-simulation you can examine.",
 	],
 	"Center Display": [
-		"This is the centering tool. It is used to scroll around your city. When you click in the window the "
-			+ "scene will re-center on the place you clicked.",
+		"This is the centering tool. Hold the left mouse button and drag to move around your city. "
+			+ "Click without dragging to center the view on the place you clicked.",
 	],
 	"Zoom Out": [
 		"This button allows you to increase the scale of your display.  The tiles grow smaller and the area "

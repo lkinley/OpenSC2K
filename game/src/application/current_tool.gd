@@ -108,6 +108,10 @@ func _give_back_chosen_tool() -> void:
 # a tool that the player chooses ends a held tool
 func _drop_held_tool() -> void:
 	app.tool_state.held_tool_pending = false
+
+	if app.map_view != null and app.map_view.pan_on_left_drag:
+		app.map_view.end_held_selection()
+
 	_give_back_chosen_tool()
 
 
@@ -241,11 +245,13 @@ func update_edit_state() -> void:
 	app.assets.refresh_scurk_artwork()
 	app.map_view.desktop_cursor_app = "city"
 	app.map_view.desktop_cursor_role = DesktopCursorRules.city_tool(app.tool_state.selected_group, app.tool_state.selected_subtool)
+	app.map_view.pan_on_left_drag = app.tool_state.selected_group == CityToolIds.Group.CENTERING
 
 	if app.scurk_place_print != null and app.scurk_place_print.visible:
 		app.map_view.desktop_cursor_app = "scurk"
 
 		if app.scurk_place_print.is_object_mode():
+			app.map_view.pan_on_left_drag = false
 			app.map_view.desktop_cursor_role = 9
 			state = ToolEditState.scurk_object(
 				app.document_state.city, app.view_state.overlay_mode, app.scurk_place_print.selected_tile_id
